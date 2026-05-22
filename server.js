@@ -1,0 +1,251 @@
+// backend/server.js
+const express = require('express');
+const cors = require('cors');
+const mysql = require('mysql2/promise');
+require('dotenv').config();
+
+const app = express();
+const PORT = 5000;
+
+app.use(cors());
+app.use(express.json());
+
+// Konfiguracja puli połączeń do bazy MySQL
+const pool = mysql.createPool({
+    host: 'sql.serwer2505966.home.pl',
+    user: '40111188_truskawki',        
+    password: 'd2kxwvpk3j_1-',               
+    database: '40111188_truskawki',    
+    port: 3380,                        
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    ssl: { rejectUnauthorized: false },
+    authPlugins: {
+        sha256_password: mysql.authPlugins ? mysql.authPlugins.sha256_password : undefined,
+        caching_sha2_password: mysql.authPlugins ? mysql.authPlugins.caching_sha2_password : undefined
+    }
+});
+
+// Endpoint weryfikacji haseł
+app.post('/api/weryfikuj-pin', async (req, res) => {
+    const { stoisko, pin } = req.body;
+    let rolaBazy = 'pin_szef';
+    if (stoisko === 'Biedronka') rolaBazy = 'pin_biedronka';
+    if (stoisko === 'Netto') rolaBazy = 'pin_netto';
+    try {
+        const [rows] = await pool.query("SELECT kod FROM hasla WHERE rola = ?", [rolaBazy]);
+        if (rows && rows.length > 0) {
+            if (pin === rows[0].kod.toString()) return res.json({ success: true });
+        }
+        return res.status(401).json({ success: false, error: "Nieprawidłowy kod PIN!" });
+    } catch (err) {
+        return res.status(500).json({ error: "Błąd bazy danych", details: err.toString() });
+    }
+});
+
+// 1. Pobranie konfiguracji
+app.get('/api/konfiguracja', async (req, res) => {
+    try {
+        const [cenyRows] = await pool.query("SELECT cena_za_kg FROM ceny_dzienne WHERE data = CURDATE()");
+        let cenaTruskawek = cenyRows && cenyRows.length > 0 ? parseFloat(cenyRows[0].cena_za_kg) : 15.00;
+        let warning = cenyRows && cenyRows.length > 0 ? "" : "Brak ceny owoców w DB na dziś! Awaryjna: 15.00 zł";
+
+        const [ustawieniaRows] = await pool.query("SELECT wartosc FROM ustawienia WHERE klucz = 'cena_lubianki'");
+        let cenaLubianki = ustawieniaRows && ustawieniaRows.length > 0 ? parseFloat(ustawieniaRows[0].wartosc) : 2.00;
+
+        res.json({ cenaTruskawek, cenaLubianki, warning });
+    } catch (err) {
+        res.status(500).json({ error: "Błąd bazy danych", details: err.toString() });
+    }
+});
+
+// 2. Dodanie nowej sprzedaży (Zaktualizowane o typ płatności: 'Gotówka' lub 'BLIK')
+// ZASTĄP ENDPOINT W backend/server.js
+app.post('/api/dodaj-sprzedaz', async (req, res) => {
+    const { waga, kwota, stoisko, typPlatnosci, czyLubianka } = req.body; // <-- Dodano czyLubianka
+    if (!stoisko) return res.status(400).json({ error: "Brak zdefiniowanego stoiska!" });
+    
+    const platnosc = typPlatnosci || 'Gotówka';
+    const lubiankaFlaga = czyLubianka ? parseInt(czyLubianka) : 0;
+    
+    try {
+        await pool.query(
+            "INSERT INTO sprzedaz (waga_kg, kwota_pln, stoisko, typ_platnosci, czy_lubianka) VALUES (?, ?, ?, ?, ?)", 
+            [waga, kwota, stoisko, platnosc, lubiankaFlaga]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+// 3. Pobranie listy sprzedaży dla konkretnego stoiska
+app.get('/api/sprzedaz-na-dzis', async (req, res) => {
+    const stoisko = req.query.stoisko;
+    try {
+        const [rows] = await pool.query(
+            "SELECT id, DATE_FORMAT(data_czas, '%H:%i:%s') as godzina, waga_kg, kwota_pln, typ_platnosci FROM sprzedaz WHERE DATE(data_czas) = CURDATE() AND stoisko = ? ORDER BY data_czas DESC",
+            [stoisko]
+        );
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 4. Panel Szefa: Ustawianie ceny owoców
+app.post('/api/ustaw-cene', async (req, res) => {
+    const { data, cena } = req.body;
+    try {
+        await pool.query("INSERT INTO ceny_dzienne (data, cena_za_kg) VALUES (?, ?) ON DUPLICATE KEY UPDATE cena_za_kg = ?", [data, cena, cena]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 5. Zmiana stałej ceny łubianki
+app.post('/api/ustaw-cene-lubianki', async (req, res) => {
+    const { cena } = req.body;
+    try {
+        await pool.query("INSERT INTO ustawienia (klucz, wartosc) VALUES ('cena_lubianki', ?) ON DUPLICATE KEY UPDATE wartosc = ?", [cena, cena]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 6. Zapisywanie zakupu hurtowego
+app.post('/api/dodaj-zakup-hurtowy', async (req, res) => {
+    const { cenaHurt, iloscHurt, skrzynkiHurt } = req.body;
+    try {
+        await pool.query(
+            "INSERT INTO zakupy_hurtowe (data, cena_hurt_za_kg, ilosc_hurt_kg, ilosc_hurt_skrzynek) VALUES (CURDATE(), ?, ?, ?) ON DUPLICATE KEY UPDATE cena_hurt_za_kg = ?, ilosc_hurt_kg = ?, ilosc_hurt_skrzynek = ?",
+            [cenaHurt, iloscHurt, skrzynkiHurt, cenaHurt, iloscHurt, skrzynkiHurt]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: "Błąd zapisu zakupu: " + err.message });
+    }
+});
+
+// 7. Zapisywanie dostawy z garażu
+// ZNAJDŹ I ZASTĄP ENDPOINT W backend/server.js
+
+// backend/server.js - Endpoint zapisu dostawy z garażu
+app.post('/api/dodaj-dostawu-stoiska', async (req, res) => {
+    const { stoisko, kg, skrzynki, kierowca } = req.body;
+    if (!kierowca) return res.status(400).json({ error: "Nie wybrano kierowcy!" });
+
+    try {
+        // Zwykłe dodanie wiersza – pozwoli na wielokrotne kursy tego samego dnia
+        await pool.query(
+            "INSERT INTO dostawy_stoisk (data, stoisko, dostarczono_kg, dostarczono_skrzynek, kierowca) VALUES (CURDATE(), ?, ?, ?, ?)",
+            [stoisko, kg, skrzynki, kierowca]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: "Błąd zapisu dostawy: " + err.message });
+    }
+});
+
+
+
+// 9. Panel Szefa: Dodawanie operacji kasowej (Wpłata na wydawanie / Zabrano nadmiar gotówki)
+app.post('/api/dodaj-operacje-kasowa', async (req, res) => {
+    const { stoisko, typ, kwota } = req.body; // typ: 'Wpłata na start' lub 'Wypłata z kasy'
+    if (!stoisko || !typ || !kwota) return res.status(400).json({ error: "Brak kompletnych danych!" });
+    try {
+        await pool.query("INSERT INTO operacje_kasowe (stoisko, typ, kwota) VALUES (?, ?, ?)", [stoisko, typ, kwota]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: "Błąd zapisu kasy: " + err.message });
+    }
+});
+
+// 10. Zapis końcowego rozliczenia stoiska do bazy danych
+// ZNAJDŹ I ZASTĄP ENDPOINT W backend/server.js
+app.post('/api/zapisz-rozliczenie-stoiska', async (req, res) => {
+    const { 
+        stoisko, naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, stratyKg,
+        cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt 
+    } = req.body;
+    
+    const s_kg = stratyKg ? parseFloat(stratyKg) : 0;
+    
+    try {
+        await pool.query(
+            `INSERT INTO raporty_koncowe 
+            (data, stoisko, pieniadze_na_wydawanie, zabrano_z_kasy, sprzedano_kg, zarobiono_total, blik_online, powinien_oddac_gotowka, straty_kg, cena_truskawki, utarg_gotowka, sprzedano_skrzynek_szt, zostalo_skrzynek_szt) 
+            VALUES (CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+            ON DUPLICATE KEY UPDATE 
+            pieniadze_na_wydawanie=?, zabrano_z_kasy=?, sprzedano_kg=?, zarobiono_total=?, blik_online=?, powinien_oddac_gotowka=?, straty_kg=?, cena_truskawki=?, utarg_gotowka=?, sprzedano_skrzynek_szt=?, zostalo_skrzynek_szt=?`,
+            [
+              // Sekcja INSERT:
+              stoisko, naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, s_kg, cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt,
+              // Sekcja UPDATE:
+              naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, s_kg, cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt
+            ]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: "Błąd zapisu rozliczenia: " + err.message });
+    }
+});
+
+
+
+// 8. ZAKTUALIZOWANY ENDPOINT: Pobranie stanu magazynu, szczegółowych danych kasowych i rozliczeń
+app.get('/api/stan-magazynu-szefa', async (req, res) => {
+    try {
+        const [hurt] = await pool.query("SELECT cena_hurt_za_kg, ilosc_hurt_kg, ilosc_hurt_skrzynek FROM zakupy_hurtowe WHERE data = CURDATE()");
+        const hurtKg = hurt && hurt.length > 0 ? parseFloat(hurt[0].ilosc_hurt_kg) : 0;
+        const hurtSkrzynki = hurt && hurt.length > 0 ? parseInt(hurt[0].ilosc_hurt_skrzynek) : 0;
+        const cenaHurt = hurt && hurt.length > 0 ? parseFloat(hurt[0].cena_hurt_za_kg) : 0;
+
+        const [dostawy] = await pool.query("SELECT stoisko, dostarczono_kg, dostarczono_skrzynek, kierowca FROM dostawy_stoisk WHERE DATE(data) = CURDATE()");
+        
+        // Zoptymalizowane zapytanie sumujące osobno Gotówkę i BLIK dla każdego stoiska
+const [sprzedaz] = await pool.query(`
+    SELECT stoisko, 
+           SUM(waga_kg) as sprzedane_kg, 
+           SUM(kwota_pln) as utarg_pln,
+           SUM(CASE WHEN typ_platnosci = 'BLIK' THEN kwota_pln ELSE 0 END) as blik_pln,
+           SUM(CASE WHEN typ_platnosci = 'Gotówka' THEN kwota_pln ELSE 0 END) as gotowka_pln,
+           
+           -- ✅ POPRAWKA: Zliczamy sztuki TYLKO tam, gdzie pracownik zaznaczył skrzynkę (czy_lubianka = 1)
+           SUM(CASE WHEN czy_lubianka = 1 THEN 1 ELSE 0 END) as sprzedane_skrzynek_baza
+           
+    FROM sprzedaz 
+    WHERE DATE(data_czas) = CURDATE() 
+    GROUP BY stoisko
+`);
+        
+        const [kasa] = await pool.query("SELECT stoisko, typ, kwota, DATE_FORMAT(data_czas, '%H:%i:%s') as godzina FROM operacje_kasowe WHERE DATE(data_czas) = CURDATE() ORDER BY data_czas DESC");
+        
+        // Pobranie zapisanych już raportów rozliczeniowych z dnia dzisiejszego
+        const [raporty] = await pool.query("SELECT * FROM raporty_koncowe WHERE data = CURDATE()");
+
+        res.json({
+            hurtKg,
+            hurtSkrzynki,
+            cenaHurt,
+            dostawy,
+            sprzedaz,
+            kasa,
+            raporty
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+// Musi być process.env.PORT !
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 Serwer działa poprawnie!`);
+});
