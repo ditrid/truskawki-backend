@@ -244,6 +244,104 @@ const [sprzedaz] = await pool.query(`
 
 
 
+
+
+
+
+
+
+
+
+// 1. Pobieranie dzisiejszych wydatków
+app.get('/api/wydatki-dzis', async (req, res) => {
+    try {
+        const [rows] = await pool.query("SELECT * FROM wydatki WHERE data = CURDATE() ORDER BY id DESC");
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 2. Dodawanie lub edycja wydatku
+app.post('/api/zapisz-wydatek', async (req, res) => {
+    const { id, nazwa, kwota } = req.body;
+    try {
+        if (id) {
+            await pool.query("UPDATE wydatki SET nazwa = ?, kwota_pln = ? WHERE id = ?", [nazwa, kwota, id]);
+        } else {
+            await pool.query("INSERT INTO wydatki (data, nazwa, kwota_pln) VALUES (CURDATE(), ?, ?)", [nazwa, kwota]);
+        }
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 3. Usuwanie wydatku
+app.delete('/api/usun-wydatek/:id', async (req, res) => {
+    try {
+        await pool.query("DELETE FROM wydatki WHERE id = ?", [req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
+
+// 1. Pobieranie dzisiejszych innych wpływów
+app.get('/api/inne-wplywy-dzis', async (req, res) => {
+    try {
+        const [rows] = await pool.query("SELECT * FROM inne_wplywy WHERE data = CURDATE() ORDER BY id DESC");
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 2. Zapisywanie lub edycja innego wpływu
+app.post('/api/zapisz-wplyw', async (req, res) => {
+    const { id, nazwa, dlaKogo, kwota } = req.body;
+    try {
+        if (id) {
+            await pool.query("UPDATE inne_wplywy SET nazwa = ?, dla_kogo = ?, kwota_pln = ? WHERE id = ?", [nazwa, dlaKogo, kwota, id]);
+        } else {
+            await pool.query("INSERT INTO inne_wplywy (data, nazwa, dla_kogo, kwota_pln) VALUES (CURDATE(), ?, ?, ?)", [nazwa, dlaKogo, kwota]);
+        }
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 3. Usuwanie innego wpływu
+app.delete('/api/usun-wplyw/:id', async (req, res) => {
+    try {
+        await pool.query("DELETE FROM inne_wplywy WHERE id = ?", [req.params.id]);
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// 4. Uaktualniony endpoint zapisu globalnego podsumowania dnia z nowymi kolumnami i komentarzem
+app.post('/api/zapisz-globalne-podsumowanie', async (req, res) => {
+    const { utargTotal, kosztZakupuHurt, wyplatyPracownikow, wydatkiTotal, inneWplywyTotal, zyskNetto, naOsobe, komentarz } = req.body;
+    try {
+        await pool.query(
+            `INSERT INTO podsumowania_dzienne 
+            (data, utarg_total_pln, koszt_zakupu_hurt_pln, wyplaty_pracownikow_pln, wydatki_total_pln, inne_wplywy_total_pln, zysk_netto_pln, na_osobe_pln, komentarz) 
+            VALUES (CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?) 
+            ON DUPLICATE KEY UPDATE 
+            utarg_total_pln=?, koszt_zakupu_hurt_pln=?, wyplaty_pracownikow_pln=?, wydatki_total_pln=?, inne_wplywy_total_pln=?, zysk_netto_pln=?, na_osobe_pln=?, komentarz=?`,
+            [
+              utargTotal, kosztZakupuHurt, wyplatyPracownikow, wydatkiTotal, inneWplywyTotal, zyskNetto, naOsobe, komentarz,
+              utargTotal, kosztZakupuHurt, wyplatyPracownikow, wydatkiTotal, inneWplywyTotal, zyskNetto, naOsobe, komentarz
+            ]
+        );
+        res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: "Błąd zapisu globalnego: " + err.message }); }
+});
+
+
+
+
+
+
+
+
+
+
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Serwer działa poprawnie!`);
 });
+
+
