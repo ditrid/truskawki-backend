@@ -340,6 +340,59 @@ app.post('/api/zapisz-globalne-podsumowanie', async (req, res) => {
 
 
 
+// DOTYCZY PODSUMOWANIA DNI 
+
+// 12. Pobranie historii wszystkich zapisanych dni (do listy)
+app.get('/api/historia-podsumowan', async (req, res) => {
+    try {
+        const [rows] = await pool.query(
+            "SELECT DATE_FORMAT(data, '%Y-%m-%d') as data_format, zysk_netto_pln, utarg_total_pln FROM podsumowania_dzienne ORDER BY data DESC"
+        );
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 13. Pobranie absolutnie wszystkich danych z konkretnego dnia wstecz
+app.get('/api/szczegoly-dnia/:data', async (req, res) => {
+    const wybranaData = req.params.data; // format YYYY-MM-DD
+    try {
+        // Główny raport finansowy dnia
+        const [globalne] = await pool.query(
+            "SELECT *, DATE_FORMAT(data, '%Y-%m-%d') as data_format FROM podsumowania_dzienne WHERE data = ?", [wybranaData]
+        );
+        // Sprzedaż na stoiskach z tego dnia
+        const [sprzedaz] = await pool.query(`
+            SELECT stoisko, SUM(waga_kg) as sprzedane_kg, SUM(kwota_pln) as utarg_pln,
+                   SUM(CASE WHEN typ_platnosci = 'BLIK' THEN kwota_pln ELSE 0 END) as blik_pln,
+                   SUM(CASE WHEN typ_platnosci = 'Gotówka' THEN kwota_pln ELSE 0 END) as gotowka_pln
+            FROM sprzedaz WHERE DATE(data_czas) = ? GROUP BY stoisko`, [wybranaData]);
+        // Dostawy z tego dnia
+        const [dostawy] = await pool.query("SELECT * FROM dostawy_stoisk WHERE DATE(data) = ?", [wybranaData]);
+        // Wydatki z tego dnia
+        const [wydatki] = await pool.query("SELECT * FROM wydatki WHERE data = ?", [wybranaData]);
+        // Inne wpływy z tego dnia
+        const [wplywy] = await pool.query("SELECT * FROM inne_wplywy WHERE data = ?", [wybranaData]);
+
+        res.json({
+            podsumowanie: globalne && globalne.length > 0 ? globalne[0] : null,
+            sprzedaz,
+            dostawy,
+            wydatki,
+            wplywy
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+
+
+
+
+
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Serwer działa poprawnie!`);
 });
