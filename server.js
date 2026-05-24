@@ -197,36 +197,45 @@ app.post('/api/zapisz-rozliczenie-stoiska', async (req, res) => {
 
 
 
-// 8. ZAKTUALIZOWANY ENDPOINT: Pobranie stanu magazynu, szczegółowych danych kasowych i rozliczeń
+
+// 8. ZAKTUALIZOWANY ENDPOINT: Pobranie stanu magazynu, szczegółowych danych kasowych i rozliczeń dla WYBRANEJ DATY lub DZIŚ
 app.get('/api/stan-magazynu-szefa', async (req, res) => {
+    // 🆕 Pobieramy datę z query stringa (np. ?data=2026-05-24). Jeśli jej nie ma, używamy dzisiejszej daty z serwera
+    const wybranaData = req.query.data || new Date().toISOString().split('T')[0];
+
     try {
-        const [hurt] = await pool.query("SELECT cena_hurt_za_kg, ilosc_hurt_kg, ilosc_hurt_skrzynek FROM zakupy_hurtowe WHERE data = CURDATE()");
+        // 🆕 Zamieniliśmy CURDATE() na zmienną [wybranaData] we wszystkich zapytaniach SQL
+        const [hurt] = await pool.query("SELECT cena_hurt_za_kg, ilosc_hurt_kg, ilosc_hurt_skrzynek FROM zakupy_hurtowe WHERE data = ?", [wybranaData]);
         const hurtKg = hurt && hurt.length > 0 ? parseFloat(hurt[0].ilosc_hurt_kg) : 0;
         const hurtSkrzynki = hurt && hurt.length > 0 ? parseInt(hurt[0].ilosc_hurt_skrzynek) : 0;
         const cenaHurt = hurt && hurt.length > 0 ? parseFloat(hurt[0].cena_hurt_za_kg) : 0;
 
-        const [dostawy] = await pool.query("SELECT stoisko, dostarczono_kg, dostarczono_skrzynek, kierowca FROM dostawy_stoisk WHERE DATE(data) = CURDATE()");
+        const [dostawy] = await pool.query("SELECT stoisko, dostarczono_kg, dostarczono_skrzynek, kierowca FROM dostawy_stoisk WHERE DATE(data) = ?", [wybranaData]);
         
-        // Zoptymalizowane zapytanie sumujące osobno Gotówkę i BLIK dla każdego stoiska
-const [sprzedaz] = await pool.query(`
-    SELECT stoisko, 
-           SUM(waga_kg) as sprzedane_kg, 
-           SUM(kwota_pln) as utarg_pln,
-           SUM(CASE WHEN typ_platnosci = 'BLIK' THEN kwota_pln ELSE 0 END) as blik_pln,
-           SUM(CASE WHEN typ_platnosci = 'Gotówka' THEN kwota_pln ELSE 0 END) as gotowka_pln,
-           
-           -- ✅ POPRAWKA: Zliczamy sztuki TYLKO tam, gdzie pracownik zaznaczył skrzynkę (czy_lubianka = 1)
-           SUM(CASE WHEN czy_lubianka = 1 THEN 1 ELSE 0 END) as sprzedane_skrzynek_baza
-           
-    FROM sprzedaz 
-    WHERE DATE(data_czas) = CURDATE() 
-    GROUP BY stoisko
-`);
+        // Zoptymalizowane zapytanie sumujące osono Gotówkę i BLIK dla każdego stoiska
+        const [sprzedaz] = await pool.query(`
+            SELECT stoisko, 
+                   SUM(waga_kg) as sprzedane_kg, 
+                   SUM(kwota_pln) as utarg_pln,
+                   SUM(CASE WHEN typ_platnosci = 'BLIK' THEN kwota_pln ELSE 0 END) as blik_pln,
+                   SUM(CASE WHEN typ_platnosci = 'Gotówka' THEN kwota_pln ELSE 0 END) as gotowka_pln,
+                   
+                   -- ✅ POPRAWKA: Zliczamy sztuki TYLKO tam, gdzie pracownik zaznaczył skrzynkę (czy_lubianka = 1)
+                   SUM(CASE WHEN czy_lubianka = 1 THEN 1 ELSE 0 END) as sprzedane_skrzynek_baza
+                   
+            FROM sprzedaz 
+            WHERE DATE(data_czas) = ? 
+            GROUP BY stoisko
+        `, [wybranaData]);
         
-        const [kasa] = await pool.query("SELECT stoisko, typ, kwota, DATE_FORMAT(data_czas, '%H:%i:%s') as godzina FROM operacje_kasowe WHERE DATE(data_czas) = CURDATE() ORDER BY data_czas DESC");
+        const [kasa] = await pool.query("SELECT stoisko, typ, kwota, DATE_FORMAT(data_czas, '%H:%i:%s') as godzina FROM operacje_kasowe WHERE DATE(data_czas) = ? ORDER BY data_czas DESC", [wybranaData]);
         
-        // Pobranie zapisanych już raportów rozliczeniowych z dnia dzisiejszego
-        const [raporty] = await pool.query("SELECT * FROM raporty_koncowe WHERE data = CURDATE()");
+        // Pobranie zapisanych już raportów rozliczeniowych z wybranego dnia
+        const [raporty] = await pool.query("SELECT * FROM raporty_koncowe WHERE data = ?", [wybranaData]);
+
+        // Pobranie zapisanego globalnego komentarza szefa z tego dnia
+        const [globalne] = await pool.query("SELECT komentarz FROM podsumowania_dzienne WHERE data = ?", [wybranaData]);
+        const komentarzTekst = globalne && globalne.length > 0 ? globalne.komentarz : "";
 
         res.json({
             hurtKg,
@@ -235,7 +244,11 @@ const [sprzedaz] = await pool.query(`
             dostawy,
             sprzedaz,
             kasa,
-            raporty
+            raporty,
+            // 🆕 Przekazujemy strukturę raportyGlobalne, aby frontendowy warunek IF poprawnie odczytał komentarz
+            raportyGlobalne: {
+                komentarz: komentarzTekst
+            }
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -312,6 +325,8 @@ app.delete('/api/usun-wplyw/:id', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+
+
 // 4. Uaktualniony endpoint zapisu globalnego podsumowania dnia z nowymi kolumnami i komentarzem
 app.post('/api/zapisz-globalne-podsumowanie', async (req, res) => {
     const { utargTotal, kosztZakupuHurt, wyplatyPracownikow, wydatkiTotal, inneWplywyTotal, zyskNetto, naOsobe, komentarz } = req.body;
@@ -386,6 +401,11 @@ app.get('/api/szczegoly-dnia/:data', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+
+
+
+
 
 
 
