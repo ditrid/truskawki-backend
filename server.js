@@ -329,16 +329,23 @@ app.delete('/api/usun-wplyw/:id', async (req, res) => {
 
 // 4. Uaktualniony endpoint zapisu globalnego podsumowania dnia z nowymi kolumnami i komentarzem
 app.post('/api/zapisz-globalne-podsumowanie', async (req, res) => {
-    const { utargTotal, kosztZakupuHurt, wyplatyPracownikow, wydatkiTotal, inneWplywyTotal, zyskNetto, naOsobe, komentarz } = req.body;
+    // 🆕 Odbieramy "wybranaDataString" przesłaną z kalendarza we frontendzie
+    const { wybranaDataString, utargTotal, kosztZakupuHurt, wyplatyPracownikow, wydatkiTotal, inneWplywyTotal, zyskNetto, naOsobe, komentarz } = req.body;
+    
+    // Zabezpieczenie: jeśli z jakiegoś powodu data nie dotrze, serwer użyje dzisiejszej
+    const ostatecznaData = wybranaDataString || new Date().toISOString().split('T')[0];
+
     try {
         await pool.query(
             `INSERT INTO podsumowania_dzienne 
             (data, utarg_total_pln, koszt_zakupu_hurt_pln, wyplaty_pracownikow_pln, wydatki_total_pln, inne_wplywy_total_pln, zysk_netto_pln, na_osobe_pln, komentarz) 
-            VALUES (CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) 
             ON DUPLICATE KEY UPDATE 
             utarg_total_pln=?, koszt_zakupu_hurt_pln=?, wyplaty_pracownikow_pln=?, wydatki_total_pln=?, inne_wplywy_total_pln=?, zysk_netto_pln=?, na_osobe_pln=?, komentarz=?`,
             [
-              utargTotal, kosztZakupuHurt, wyplatyPracownikow, wydatkiTotal, inneWplywyTotal, zyskNetto, naOsobe, komentarz,
+              // 🆕 Sekcja INSERT: zamieniliśmy CURDATE() na ostatecznaData
+              ostatecznaData, utargTotal, kosztZakupuHurt, wyplatyPracownikow, wydatkiTotal, inneWplywyTotal, zyskNetto, naOsobe, komentarz,
+              // Sekcja UPDATE:
               utargTotal, kosztZakupuHurt, wyplatyPracownikow, wydatkiTotal, inneWplywyTotal, zyskNetto, naOsobe, komentarz
             ]
         );
