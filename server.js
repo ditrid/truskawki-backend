@@ -117,19 +117,32 @@ app.post('/api/ustaw-cene-lubianki', async (req, res) => {
     }
 });
 
-// 6. Zapisywanie zakupu hurtowego
+// 6. Zapisywanie zakupu hurtowego ze wsparciem dla wybranej daty z frontendu
 app.post('/api/dodaj-zakup-hurtowy', async (req, res) => {
-    const { cenaHurt, iloscHurt, skrzynkiHurt } = req.body;
+    // 🆕 Odbieramy "dataHurt" przesłaną z formularza w React
+    const { cenaHurt, iloscHurt, skrzynkiHurt, dataHurt } = req.body;
+    
+    // Zabezpieczenie: jeśli data z jakiegoś powodu nie dotrze, używamy dzisiejszej
+    const ostatecznaData = dataHurt || new Date().toISOString().split('T')[0];
+
     try {
         await pool.query(
-            "INSERT INTO zakupy_hurtowe (data, cena_hurt_za_kg, ilosc_hurt_kg, ilosc_hurt_skrzynek) VALUES (CURDATE(), ?, ?, ?) ON DUPLICATE KEY UPDATE cena_hurt_za_kg = ?, ilosc_hurt_kg = ?, ilosc_hurt_skrzynek = ?",
-            [cenaHurt, iloscHurt, skrzynkiHurt, cenaHurt, iloscHurt, skrzynkiHurt]
+            `INSERT INTO zakupy_hurtowe (data, cena_hurt_za_kg, ilosc_hurt_kg, ilosc_hurt_skrzynek) 
+             VALUES (?, ?, ?, ?) 
+             ON DUPLICATE KEY UPDATE cena_hurt_za_kg = ?, ilosc_hurt_kg = ?, ilosc_hurt_skrzynek = ?`,
+            [
+              // Sekcja INSERT (zastąpiliśmy CURDATE() zmienną ostatecznaData)
+              ostatecznaData, cenaHurt, iloscHurt, skrzynkiHurt, 
+              // Sekcja UPDATE (w razie gdyby dla tej daty rekord już istniał)
+              cenaHurt, iloscHurt, skrzynkiHurt
+            ]
         );
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: "Błąd zapisu zakupu: " + err.message });
     }
 });
+
 
 // 7. Zapisywanie dostawy z garażu
 // ZNAJDŹ I ZASTĄP ENDPOINT W backend/server.js
