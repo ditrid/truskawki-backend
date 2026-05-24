@@ -235,7 +235,7 @@ app.get('/api/stan-magazynu-szefa', async (req, res) => {
 
         // Pobranie zapisanego globalnego komentarza szefa z tego dnia
         const [globalne] = await pool.query("SELECT komentarz FROM podsumowania_dzienne WHERE data = ?", [wybranaData]);
-        const komentarzTekst = globalne && globalne.length > 0 ? globalne.komentarz : "";
+        const komentarzTekst = globalne && globalne.length > 0 ? globalne[0].komentarz : "";
 
         res.json({
             hurtKg,
