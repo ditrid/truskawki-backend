@@ -179,7 +179,6 @@ app.post('/api/dodaj-operacje-kasowa', async (req, res) => {
 });
 
 // 10. Zapis końcowego rozliczenia stoiska do bazy danych
-// 10. Zapis końcowego rozliczenia stoiska do bazy danych
 app.post('/api/zapisz-rozliczenie-stoiska', async (req, res) => {
     const { 
         stoisko, naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, stratyKg,
@@ -235,6 +234,7 @@ app.post('/api/zapisz-rozliczenie-stoiska', async (req, res) => {
         res.status(500).json({ error: "Błąd zapisu rozliczenia: " + err.message });
     }
 });
+
 
 
 
