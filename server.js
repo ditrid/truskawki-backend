@@ -180,14 +180,16 @@ app.post('/api/dodaj-operacje-kasowa', async (req, res) => {
 
 // 10. Zapis końcowego rozliczenia stoiska do bazy danych
 // ZNAJDŹ I ZASTĄP ENDPOINT W backend/server.js
+// 10. Zapis końcowego rozliczenia stoiska do bazy danych
 app.post('/api/zapisz-rozliczenie-stoiska', async (req, res) => {
     const { 
         stoisko, naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, stratyKg,
         cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt, zarobekPracownika
     } = req.body;
     
+    // Zabezpieczenie przed pustymi wartościami (NaN / undefined)
     const s_kg = stratyKg ? parseFloat(stratyKg) : 0;
-    const zarobek = zarobekPracownika ? parseFloat(zarobekPracownika) : 250.00; // Domyślnie 250, jeśli puste
+    const zarobek = zarobekPracownika ? parseFloat(zarobekPracownika) : 220.00; // Domyślnie 220, jeśli puste
     
     try {
         await pool.query(
@@ -195,17 +197,38 @@ app.post('/api/zapisz-rozliczenie-stoiska', async (req, res) => {
             (data, stoisko, pieniadze_na_wydawanie, zabrano_z_kasy, sprzedano_kg, zarobiono_total, blik_online, powinien_oddac_gotowka, straty_kg, cena_truskawki, utarg_gotowka, sprzedano_skrzynek_szt, zostalo_skrzynek_szt, zarobek_pracownika) 
             VALUES (CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
             ON DUPLICATE KEY UPDATE 
-            pieniadze_na_wydawanie=?, zabrano_z_kasy=?, sprzedano_kg=?, zarobiono_total=?, blik_online=?, powinien_oddac_gotowka=?, straty_kg=?, cena_truskawki=?, utarg_gotowka=?, sprzedano_skrzynek_szt=?, zostalo_skrzynek_szt=?, zarobek_pracownika=?`,
+            pieniadze_na_wydawanie = VALUES(pieniadze_na_wydawanie), 
+            zabrano_z_kasy = VALUES(zabrano_z_kasy), 
+            sprzedano_kg = VALUES(sprzedano_kg), 
+            zarobiono_total = VALUES(zarobiono_total), 
+            blik_online = VALUES(blik_online), 
+            powinien_oddac_gotowka = VALUES(powinien_oddac_gotowka), 
+            straty_kg = VALUES(straty_kg), 
+            cena_truskawki = VALUES(cena_truskawki), 
+            utarg_gotowka = VALUES(utarg_gotowka), 
+            sprzedano_skrzynek_szt = VALUES(sprzedano_skrzynek_szt), 
+            zostalo_skrzynek_szt = VALUES(zostalo_skrzynek_szt), 
+            zarobek_pracownika = VALUES(zarobek_pracownika)`,
             [
-              // Sekcja INSERT (Dokładnie 13 wartości dla 13 znaków zapytania):
-              stoisko, naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, s_kg, cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt, zarobek,
-              // Sekcja UPDATE (Dokładnie 12 wartości dla 12 znaków zapytania - bez 'stoisko'):
-              naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, s_kg, cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt, zarobek
+              // Dokładnie 13 wartości odpowiadających 13 znakom zapytania powyżej (data to CURDATE())
+              stoisko, 
+              naWdawanie, 
+              zabrano, 
+              sprzedaneKg, 
+              zarobioneTotal, 
+              blik, 
+              doOddania, 
+              s_kg, 
+              cenaTruskawki, 
+              utargGotowka, 
+              sprzedanoSkrzynekSzt, 
+              zostaloSkrzynekSzt, 
+              zarobek
             ]
         );
         res.json({ success: true });
     } catch (err) {
-        console.error("Szczegóły błędu MySQL:", err); // Logowanie błędu w terminalu serwera
+        console.error("Szczegółowy błąd MySQL:", err);
         res.status(500).json({ error: "Błąd zapisu rozliczenia: " + err.message });
     }
 });
