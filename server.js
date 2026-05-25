@@ -280,21 +280,29 @@ app.get('/api/stan-magazynu-szefa', async (req, res) => {
 
 
 // 1. Pobieranie dzisiejszych wydatków
+// 1. ZAKTUALIZOWANE: Pobieranie wydatków dla WYBRANEJ DATY z kalendarza (lub dziś)
 app.get('/api/wydatki-dzis', async (req, res) => {
+    // Odbieramy datę z query stringa (?data=...). Jeśli jej nie ma, bierzemy dzisiejszą z serwera
+    const dataFiltr = req.query.data || new Date().toISOString().split('T')[0];
     try {
-        const [rows] = await pool.query("SELECT * FROM wydatki WHERE data = CURDATE() ORDER BY id DESC");
+        // Zastąpiono CURDATE() parametrem przekazanym z kalendarza
+        const [rows] = await pool.query("SELECT * FROM wydatki WHERE data = ? ORDER BY id DESC", [dataFiltr]);
         res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+
 // 2. Dodawanie lub edycja wydatku
 app.post('/api/zapisz-wydatek', async (req, res) => {
-    const { id, nazwa, kwota } = req.body;
+    // 🆕 Odbieramy parametr dataZalegla z frontendu
+    const { id, nazwa, kwota, dataZalegla } = req.body;
+    const ostatecznaData = dataZalegla || new Date().toISOString().split('T')[0];
     try {
         if (id) {
             await pool.query("UPDATE wydatki SET nazwa = ?, kwota_pln = ? WHERE id = ?", [nazwa, kwota, id]);
         } else {
-            await pool.query("INSERT INTO wydatki (data, nazwa, kwota_pln) VALUES (CURDATE(), ?, ?)", [nazwa, kwota]);
+            // 🆕 Zamieniono CURDATE() na znak zapytania ? i dodano ostatecznaData
+            await pool.query("INSERT INTO wydatki (data, nazwa, kwota_pln) VALUES (?, ?, ?)", [ostatecznaData, nazwa, kwota]);
         }
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
@@ -311,21 +319,28 @@ app.delete('/api/usun-wydatek/:id', async (req, res) => {
 
 
 // 1. Pobieranie dzisiejszych innych wpływów
+// 2. ZAKTUALIZOWANE: Pobieranie innych wpływów dla WYBRANEJ DATY z kalendarza (lub dziś)
 app.get('/api/inne-wplywy-dzis', async (req, res) => {
+    // Odbieramy datę z query stringa (?data=...). Jeśli jej nie ma, bierzemy dzisiejszą z serwera
+    const dataFiltr = req.query.data || new Date().toISOString().split('T')[0];
     try {
-        const [rows] = await pool.query("SELECT * FROM inne_wplywy WHERE data = CURDATE() ORDER BY id DESC");
+        // Zastąpiono CURDATE() parametrem przekazanym z kalendarza
+        const [rows] = await pool.query("SELECT * FROM inne_wplywy WHERE data = ? ORDER BY id DESC", [dataFiltr]);
         res.json(rows);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // 2. Zapisywanie lub edycja innego wpływu
 app.post('/api/zapisz-wplyw', async (req, res) => {
-    const { id, nazwa, dlaKogo, kwota } = req.body;
+    // 🆕 Odbieramy parametr dataZalegla z frontendu
+    const { id, nazwa, dlaKogo, kwota, dataZalegla } = req.body;
+    const ostatecznaData = dataZalegla || new Date().toISOString().split('T')[0];
     try {
         if (id) {
             await pool.query("UPDATE inne_wplywy SET nazwa = ?, dla_kogo = ?, kwota_pln = ? WHERE id = ?", [nazwa, dlaKogo, kwota, id]);
         } else {
-            await pool.query("INSERT INTO inne_wplywy (data, nazwa, dla_kogo, kwota_pln) VALUES (CURDATE(), ?, ?, ?)", [nazwa, dlaKogo, kwota]);
+            // 🆕 Zamieniono CURDATE() na znak zapytania ? i dodano ostatecznaData
+            await pool.query("INSERT INTO inne_wplywy (data, nazwa, dla_kogo, kwota_pln) VALUES (?, ?, ?, ?)", [ostatecznaData, nazwa, dlaKogo, kwota]);
         }
         res.json({ success: true });
     } catch (err) { res.status(500).json({ error: err.message }); }
