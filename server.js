@@ -189,8 +189,13 @@ app.post('/api/zapisz-rozliczenie-stoiska', async (req, res) => {
     const s_kg = stratyKg ? parseFloat(stratyKg) : 0;
     const z_kg = zostaloKg ? parseFloat(zostaloKg) : 0;
     
-    // 🔴 POPRAWKA: Jeśli zarobekPracownika to 0, to parseFloat(0) da 0. Zamiana na 220 nastąpi tylko przy braku pola (undefined / null)
-    const zarobek = (zarobekPracownika !== undefined && zarobekPracownika !== null && zarobekPracownika !== '') ? parseFloat(zarobekPracownika) : 220.00;
+    // 🔴 POPRAWKA: Precyzyjne sprawdzenie. Jeśli wartość to 0, "0" lub liczba, używamy jej. Jeśli pole jest całkiem puste, dajemy 220.
+    let zarobek;
+    if (zarobekPracownika !== undefined && zarobekPracownika !== null && zarobekPracownika !== '') {
+        zarobek = parseFloat(zarobekPracownika);
+    } else {
+        zarobek = 250.00;
+    }
     
     try {
         await pool.query(
