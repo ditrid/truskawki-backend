@@ -179,43 +179,54 @@ app.post('/api/dodaj-operacje-kasowa', async (req, res) => {
 });
 
 // 10. Zapis końcowego rozliczenia stoiska do bazy danych
-// ZNAJDŹ I ZASTĄP ENDPOINT W backend/server.js
-// 10. Zapis końcowego rozliczenia stoiska do bazy danych
 // 10. Zapis końcowego rozliczenia stoiska do bazy danych
 app.post('/api/zapisz-rozliczenie-stoiska', async (req, res) => {
     const { 
         stoisko, naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, stratyKg,
+        zostaloKg, // Odbieramy pole z frontendu
         cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt, zarobekPracownika
     } = req.body;
     
-    // Filtrowanie i zabezpieczenie przed pustymi polami z frontendu
+    // Zabezpieczenie typów danych
     const s_kg = stratyKg ? parseFloat(stratyKg) : 0;
+    const z_kg = zostaloKg ? parseFloat(zostaloKg) : 0;
     const zarobek = zarobekPracownika ? parseFloat(zarobekPracownika) : 220.00;
     
     try {
         await pool.query(
             `INSERT INTO raporty_koncowe 
-            (data, stoisko, pieniadze_na_wydawanie, zabrano_z_kasy, sprzedano_kg, zarobiono_total, blik_online, powinien_oddac_gotowka, straty_kg, cena_truskawki, utarg_gotowka, sprzedano_skrzynek_szt, zostalo_skrzynek_szt, zarobek_pracownika) 
-            VALUES (CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+            (data, stoisko, pieniadze_na_wydawanie, zabrano_z_kasy, sprzedano_kg, zarobiono_total, blik_online, powinien_oddac_gotowka, straty_kg, zostalo_kg, cena_truskawki, utarg_gotowka, sprzedano_skrzynek_szt, zostalo_skrzynek_szt, zarobek_pracownika) 
+            VALUES (CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
             ON DUPLICATE KEY UPDATE 
-            pieniadze_na_wydawanie = ?, 
-            zabrano_z_kasy = ?, 
-            sprzedano_kg = ?, 
-            zarobiono_total = ?, 
-            blik_online = ?, 
-            powinien_oddac_gotowka = ?, 
-            straty_kg = ?, 
-            cena_truskawki = ?, 
-            utarg_gotowka = ?, 
-            sprzedano_skrzynek_szt = ?, 
-            zostalo_skrzynek_szt = ?, 
-            zarobek_pracownika = ?`,
+            pieniadze_na_wydawanie = VALUES(pieniadze_na_wydawanie), 
+            zabrano_z_kasy = VALUES(zabrano_z_kasy), 
+            sprzedano_kg = VALUES(sprzedano_kg), 
+            zarobiono_total = VALUES(zarobiono_total), 
+            blik_online = VALUES(blik_online), 
+            powinien_oddac_gotowka = VALUES(powinien_oddac_gotowka), 
+            straty_kg = VALUES(straty_kg), 
+            zostalo_kg = VALUES(zostalo_kg), 
+            cena_truskawki = VALUES(cena_truskawki), 
+            utarg_gotowka = VALUES(utarg_gotowka), 
+            sprzedano_skrzynek_szt = VALUES(sprzedano_skrzynek_szt), 
+            zostalo_skrzynek_szt = VALUES(zostalo_skrzynek_szt), 
+            zarobek_pracownika = VALUES(zarobek_pracownika)`,
             [
-              // Sekcja 1: INSERT (13 wartości dla 13 znaków zapytania)
-              stoisko, naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, s_kg, cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt, zarobek,
-              
-              // Sekcja 2: UPDATE (12 wartości dla 12 znaków zapytania - BEZ stoiska i BEZ daty)
-              naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, s_kg, cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt, zarobek
+              // Dokładnie 14 wartości dla 14 znaków zapytania w VALUES() - data to CURDATE()
+              stoisko, 
+              naWdawanie, 
+              zabrano, 
+              sprzedaneKg, 
+              zarobioneTotal, 
+              blik, 
+              doOddania, 
+              s_kg, 
+              z_kg, 
+              cenaTruskawki, 
+              utargGotowka, 
+              sprzedanoSkrzynekSzt, 
+              zostaloSkrzynekSzt, 
+              zarobek
             ]
         );
         res.json({ success: true });
@@ -224,6 +235,7 @@ app.post('/api/zapisz-rozliczenie-stoiska', async (req, res) => {
         res.status(500).json({ error: "Błąd zapisu rozliczenia: " + err.message });
     }
 });
+
 
 
 
