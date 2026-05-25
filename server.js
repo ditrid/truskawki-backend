@@ -183,23 +183,24 @@ app.post('/api/dodaj-operacje-kasowa', async (req, res) => {
 app.post('/api/zapisz-rozliczenie-stoiska', async (req, res) => {
     const { 
         stoisko, naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, stratyKg,
-        cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt 
+        cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt, zarobekPracownika
     } = req.body;
     
     const s_kg = stratyKg ? parseFloat(stratyKg) : 0;
+    const zarobek = zarobekPracownika ? parseFloat(zarobekPracownika) : 250.00; // Domyślnie 220, jeśli puste
     
     try {
         await pool.query(
             `INSERT INTO raporty_koncowe 
-            (data, stoisko, pieniadze_na_wydawanie, zabrano_z_kasy, sprzedano_kg, zarobiono_total, blik_online, powinien_oddac_gotowka, straty_kg, cena_truskawki, utarg_gotowka, sprzedano_skrzynek_szt, zostalo_skrzynek_szt) 
-            VALUES (CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+            (data, stoisko, pieniadze_na_wydawanie, zabrano_z_kasy, sprzedano_kg, zarobiono_total, blik_online, powinien_oddac_gotowka, straty_kg, cena_truskawki, utarg_gotowka, sprzedano_skrzynek_szt, zostalo_skrzynek_szt, zarobek_pracownika) 
+            VALUES (CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
             ON DUPLICATE KEY UPDATE 
-            pieniadze_na_wydawanie=?, zabrano_z_kasy=?, sprzedano_kg=?, zarobiono_total=?, blik_online=?, powinien_oddac_gotowka=?, straty_kg=?, cena_truskawki=?, utarg_gotowka=?, sprzedano_skrzynek_szt=?, zostalo_skrzynek_szt=?`,
+            pieniadze_na_wydawanie=?, zabrano_z_kasy=?, sprzedano_kg=?, zarobiono_total=?, blik_online=?, powinien_oddac_gotowka=?, straty_kg=?, cena_truskawki=?, utarg_gotowka=?, sprzedano_skrzynek_szt=?, zostalo_skrzynek_szt=?, zarobek_pracownika=?`,
             [
               // Sekcja INSERT:
-              stoisko, naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, s_kg, cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt,
+              stoisko, naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, s_kg, cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt, zarobek,
               // Sekcja UPDATE:
-              naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, s_kg, cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt
+              naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, s_kg, cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt, zarobek
             ]
         );
         res.json({ success: true });
@@ -436,5 +437,4 @@ app.get('/api/szczegoly-dnia/:data', async (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Serwer działa poprawnie!`);
 });
-
 
