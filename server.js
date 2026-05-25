@@ -187,27 +187,29 @@ app.post('/api/zapisz-rozliczenie-stoiska', async (req, res) => {
     } = req.body;
     
     const s_kg = stratyKg ? parseFloat(stratyKg) : 0;
-    const zarobek = zarobekPracownika ? parseFloat(zarobekPracownika) : 250.00; // Domyślnie 220, jeśli puste
+    const zarobek = zarobekPracownika ? parseFloat(zarobekPracownika) : 250.00; // Domyślnie 250, jeśli puste
     
     try {
         await pool.query(
             `INSERT INTO raporty_koncowe 
             (data, stoisko, pieniadze_na_wydawanie, zabrano_z_kasy, sprzedano_kg, zarobiono_total, blik_online, powinien_oddac_gotowka, straty_kg, cena_truskawki, utarg_gotowka, sprzedano_skrzynek_szt, zostalo_skrzynek_szt, zarobek_pracownika) 
-            VALUES (CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
+            VALUES (CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
             ON DUPLICATE KEY UPDATE 
             pieniadze_na_wydawanie=?, zabrano_z_kasy=?, sprzedano_kg=?, zarobiono_total=?, blik_online=?, powinien_oddac_gotowka=?, straty_kg=?, cena_truskawki=?, utarg_gotowka=?, sprzedano_skrzynek_szt=?, zostalo_skrzynek_szt=?, zarobek_pracownika=?`,
             [
-              // Sekcja INSERT:
+              // Sekcja INSERT (Dokładnie 13 wartości dla 13 znaków zapytania):
               stoisko, naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, s_kg, cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt, zarobek,
-              // Sekcja UPDATE:
+              // Sekcja UPDATE (Dokładnie 12 wartości dla 12 znaków zapytania - bez 'stoisko'):
               naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, s_kg, cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt, zarobek
             ]
         );
         res.json({ success: true });
     } catch (err) {
+        console.error("Szczegóły błędu MySQL:", err); // Logowanie błędu w terminalu serwera
         res.status(500).json({ error: "Błąd zapisu rozliczenia: " + err.message });
     }
 });
+
 
 
 
