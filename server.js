@@ -182,14 +182,15 @@ app.post('/api/dodaj-operacje-kasowa', async (req, res) => {
 app.post('/api/zapisz-rozliczenie-stoiska', async (req, res) => {
     const { 
         stoisko, naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, stratyKg,
-        zostaloKg, // Poprawnie odebrane z frontendu
+        zostaloKg, 
         cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt, zarobekPracownika
     } = req.body;
     
-    // Bezpieczne parsowanie typów danych przed zapytaniem SQL
     const s_kg = stratyKg ? parseFloat(stratyKg) : 0;
     const z_kg = zostaloKg ? parseFloat(zostaloKg) : 0;
-    const zarobek = zarobekPracownika ? parseFloat(zarobekPracownika) : 220.00; // Domyślnie 220, jeśli puste
+    
+    // 🔴 POPRAWKA: Jeśli zarobekPracownika to 0, to parseFloat(0) da 0. Zamiana na 220 nastąpi tylko przy braku pola (undefined / null)
+    const zarobek = (zarobekPracownika !== undefined && zarobekPracownika !== null && zarobekPracownika !== '') ? parseFloat(zarobekPracownika) : 220.00;
     
     try {
         await pool.query(
@@ -211,21 +212,7 @@ app.post('/api/zapisz-rozliczenie-stoiska', async (req, res) => {
             zostalo_skrzynek_szt = VALUES(zostalo_skrzynek_szt), 
             zarobek_pracownika = VALUES(zarobek_pracownika)`,
             [
-              // Dokładnie 14 wartości odpowiadających 14 znakom zapytania w sekcji VALUES():
-              stoisko, 
-              naWdawanie, 
-              zabrano, 
-              sprzedaneKg, 
-              zarobioneTotal, 
-              blik, 
-              doOddania, 
-              s_kg, 
-              z_kg, // Wartość trafia precyzyjnie do kolumny zostalo_kg
-              cenaTruskawki, 
-              utargGotowka, 
-              sprzedanoSkrzynekSzt, 
-              zostaloSkrzynekSzt, 
-              zarobek
+              stoisko, naWdawanie, zabrano, sprzedaneKg, zarobioneTotal, blik, doOddania, s_kg, z_kg, cenaTruskawki, utargGotowka, sprzedanoSkrzynekSzt, zostaloSkrzynekSzt, zarobek
             ]
         );
         res.json({ success: true });
